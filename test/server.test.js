@@ -180,6 +180,88 @@ describe(`compare with express`, () => {
   });
 });
 
+describe(`CORS`, () => {
+  test(`should handle a preflight OPTIONS request correctly`, async () => {
+    const url = createUrl(`/json`); // The path doesn't matter much for our wildcard handler
+
+    // Simulate a browser's preflight request for a POST with a custom header
+    const response = await fetch(url, {
+      method: "OPTIONS",
+      headers: {
+        Origin: "http://localhost:5173", // A different origin
+        "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "Content-Type, Authorization",
+      },
+    });
+
+    // Preflight should return 204 No Content
+    expect(response.status).toBe(204);
+
+    // It should not have a body
+    const text = await response.text();
+    expect(text).toBe(``);
+
+    // Check for the essential CORS headers
+    const headers = response.headers;
+    expect(headers.get("Access-Control-Allow-Origin")).toBe("*");
+    expect(headers.get("Access-Control-Allow-Methods")).toContain("POST");
+    expect(headers.get("Access-Control-Allow-Headers")).toContain(
+      "Authorization"
+    );
+  });
+
+  test(`should include 'Access-Control-Allow-Origin' header on actual GET request`, async () => {
+    const url = createUrl(`/json`);
+
+    // Simulate the actual GET request following a successful preflight
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        // The browser will include the Origin header on the actual request too
+        Origin: "http://localhost:5173",
+      },
+    });
+
+    // The request should succeed
+    expect(response.status).toBe(200);
+
+    // The response to the actual request MUST also include the ACAO header
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
+
+    // Verify the body is correct, just to be sure
+    const json = await response.json();
+    expect(json.hello).toBe("world");
+  });
+
+  test(`should not send duplicate CORS headers (fixes the previous bug)`, async () => {
+    const url = createUrl(`/json`);
+
+    // Make a preflight request
+    const optionsResponse = await fetch(url, {
+      method: "OPTIONS",
+      headers: {
+        Origin: "http://localhost:5173",
+        "Access-Control-Request-Method": "GET",
+      },
+    });
+
+    // The 'get' method on the Headers object returns a single value.
+    // If the header was sent as '*, *', this test would fail.
+    expect(optionsResponse.headers.get("Access-Control-Allow-Origin")).toBe(
+      "*"
+    );
+
+    // Make the actual request
+    const getResponse = await fetch(url, {
+      headers: {
+        Origin: "http://localhost:5173",
+      },
+    });
+
+    expect(getResponse.headers.get("Access-Control-Allow-Origin")).toBe("*");
+  });
+});
+
 afterAll(() => {
   server.close();
 });

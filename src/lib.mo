@@ -83,6 +83,13 @@ module {
 
     public var authorized = cacheAuthorized;
 
+    // Store CORS configuration if enabled
+    var corsConfig : ?{
+      origin : Text;
+      methods : Text;
+      headers : Text;
+    } = null;
+
     let missingResponse : Response = {
       status_code = 404;
       headers = [];
@@ -133,6 +140,9 @@ module {
 
     var deleteRequests = HashMap.StableHashMap<Text, HttpFunction>(0, Text.equal, Text.hash);
 
+    // Add a map for OPTIONS requests
+    var optionsRequests = HashMap.StableHashMap<Text, HttpFunction>(0, Text.equal, Text.hash);
+
     /**
     * iterates through the request handlers and finds the first one that matches the path
     * @param path The path to match
@@ -155,7 +165,7 @@ module {
             };
           };
           case (#err _) {
-            return null;
+            // This is not a match, continue to the next pattern
           };
         };
       };
@@ -198,6 +208,14 @@ module {
           case null {};
         };
 
+        // Check for a wildcard handler, useful for CORS
+        switch (map.get("*")) {
+          case (?f) {
+            return await f(req);
+          };
+          case null {};
+        };
+
         // Check for a fallback
         switch (fallback) {
           case (?f) {
@@ -223,6 +241,9 @@ module {
         };
         case "DELETE" {
           await handleFunction(deleteRequests, req, null);
+        };
+        case "OPTIONS" {
+          await handleFunction(optionsRequests, req, null);
         };
         case _ {
           missingResponse;
@@ -302,6 +323,9 @@ module {
         case "DELETE" {
           deleteRequests.put(lowercaseUrl, function);
         };
+        case "OPTIONS" {
+          optionsRequests.put(lowercaseUrl, function);
+        };
         case _ {};
       };
     };
@@ -370,6 +394,50 @@ module {
 
     public func delete(path : Text, handler : (request : Request, response : ResponseClass) -> async Response) {
       registerRequestWithHandler("DELETE", path, handler);
+    };
+
+    /**
+    * Register an OPTIONS request handler
+    * @param path The path to handle
+    * @param handler The function to handle the request
+    */
+    public func options(path : Text, handler : (request : Request, response : ResponseClass) -> async Response) {
+      registerRequestWithHandler("OPTIONS", path, handler);
+    };
+
+    /**
+    * Enables CORS for all routes by setting up a default OPTIONS handler
+    * and adding the Access-Control-Allow-Origin header to all responses.
+    * @param origin The allowed origin (e.g., "*", "https://my-frontend.com")
+    * @param methods The allowed HTTP methods (e.g., "GET, POST, OPTIONS")
+    * @param allowedHeaders The allowed request headers (e.g., "Content-Type, Authorization")
+    */
+    public func enableCors(origin : Text, methods : Text, allowedHeaders : Text) {
+      // 1. Store the config to add headers to all responses
+      corsConfig := ?{
+        origin = origin;
+        methods = methods;
+        headers = allowedHeaders;
+      };
+
+      // 2. Register a global OPTIONS handler for preflight requests
+      options(
+        "*",
+        func(request : Request, response : ResponseClass) : async Response {
+          return response.send({
+            status_code = 204; // No Content
+            headers = [
+              ("Access-Control-Allow-Origin", origin),
+              ("Access-Control-Allow-Methods", methods),
+              ("Access-Control-Allow-Headers", allowedHeaders),
+              ("Access-Control-Max-Age", "86400") // Cache preflight for 1 day
+            ];
+            body = Blob.fromArray([]);
+            streaming_strategy = null;
+            cache_strategy = #noCache;
+          });
+        },
+      );
     };
 
     public func entries() : SerializedEntries {
@@ -465,9 +533,22 @@ module {
 
       let response = await process_request(parsedrequest);
 
+      // Add CORS headers to the actual response if configured
+      var finalHeaders = response.headers;
+      switch (corsConfig) {
+        case (?config) {
+          // CRITICAL FIX: Only add the origin header to non-preflight requests.
+          // The OPTIONS handler already adds this header for its own responses.
+          if (parsedrequest.method != "OPTIONS") {
+            finalHeaders := joinArrays(finalHeaders, [("Access-Control-Allow-Origin", config.origin)]);
+          };
+        };
+        case null {};
+      };
+
       let formattedResponse = {
         status_code = response.status_code;
-        headers = response.headers;
+        headers = finalHeaders; // Use potentially modified headers
         body = response.body;
         streaming_strategy = response.streaming_strategy;
         upgrade = null;

@@ -18,6 +18,12 @@ shared ({ caller = creator }) actor class () {
 
   var server = Server.Server({ serializedEntries });
 
+  server.enableCors(
+    "*",
+    "GET, POST, OPTIONS",
+    "Content-Type, Authorization",
+  );
+
   server.get(
     "/",
     func(_ : Request, res : ResponseClass) : async Response {
