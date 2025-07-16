@@ -4,7 +4,7 @@ This is a simple HTTP server for Motoko. Its interface is designed to be similar
 
 Check out the [examples](./examples) directory for examples of how to use this library.
 
-Live http_greet example: [https://qg33c-4aaaa-aaaab-qaica-cai.ic0.app/]([https://qg33c-4aaaa-aaaab-qaica-cai.ic0.app/])
+Live http_greet example: [https://qg33c-4aaaa-aaaab-qaica-cai.ic0.app/](https://qg33c-4aaaa-aaaab-qaica-cai.ic0.app/)
 
 # Installation
 
@@ -68,13 +68,33 @@ actor {
 }
 ```
 
+### Enabling CORS (Cross-Origin Resource Sharing)
+
+If you are building a web application where the frontend is served from a different origin than your canister, the browser will block `fetch` requests for security reasons. To allow your frontend to call your canister's API, you must enable CORS.
+
+This library provides a simple helper function to enable CORS for all routes. Call it right after initializing your server.
+
+```lua
+// After initializing the server
+server.enableCors(
+  // Allowed origins. Use "*" for public APIs, or a specific origin for production.
+  "*",
+  // Allowed HTTP methods.
+  "GET, POST, OPTIONS",
+  // Allowed request headers.
+  "Content-Type, Authorization"
+);
+```
+
+This will automatically handle preflight `OPTIONS` requests and add the necessary `Access-Control-Allow-Origin` header to your responses.
+
 ## Adding routes
 
-As with the Express.js library, you can add routes to the server using the `get`, `post`, `put`, and `delete` functions.
+As with the Express.js library, you can add routes to the server using the `get`, `post`, `put`, `delete`, and `options` functions.
 
 Each of these functions takes a path and a callback function. The callback function is called when a request is made to the server with a matching path.
 
-The callback function takes a `Request` object and a `Response` object. The `Request` object contains information about the request, such as the request body, query parameters, and headers. The `Response` object is used to send a response to the client.
+The callback function takes a `Request` object and a `ResponseClass` object. The `Request` object contains information about the request, such as the request body, query parameters, and headers. The `ResponseClass` object is used to send a response to the client.
 
 Here is an example of how to add a route to the server:
 
@@ -101,6 +121,24 @@ server.get("/api", func (req : Request, res : ResponseClass) : async Response {
         status_code = 200;
         body = "{ \"hello\": \"world\" }";
         cache_strategy = #default;
+    });
+});
+```
+
+While the `server.enableCors()` helper is recommended, you can also define manual `OPTIONS` routes for fine-grained control over specific endpoints.
+
+```lua
+server.options("/my-custom-route", func (req : Request, res : ResponseClass) : async Response {
+    res.send({
+        status_code = 204; // No Content
+        headers = [
+            ("Access-Control-Allow-Origin", "https://my-frontend.com"),
+            ("Access-Control-Allow-Methods", "PUT, OPTIONS"),
+            ("Access-Control-Allow-Headers", "X-Custom-Header")
+        ];
+        body = Blob.fromArray([]);
+        streaming_strategy = null;
+        cache_strategy = #noCache;
     });
 });
 ```
@@ -147,7 +185,7 @@ For requests that are not cached, the server will upgrade the request to an upda
 
 See the `examples` directory for examples of how to use this library. These examples are also available on the Internet Computer as canisters:
 
-- Http Greet: [https://qg33c-4aaaa-aaaab-qaica-cai.ic0.app/]([https://qg33c-4aaaa-aaaab-qaica-cai.ic0.app/])
+- Http Greet: [https://qg33c-4aaaa-aaaab-qaica-cai.ic0.app/](https://qg33c-4aaaa-aaaab-qaica-cai.ic0.app/)
 
 ## Roadmap
 
@@ -175,7 +213,7 @@ Below are all of the types and functions that are exported by this library, as w
 - `type HttpRequest = Server.HttpRequest` - [./src/Server.mo](https://github.com/krpeacock/certified-cache/blob/c1f209d14f490f905b7de2a2bd3f917377310675/src/Http.mo#L36)
 - `type HttpResponse = Server.HttpResponse` - [./src/Server.mo](https://github.com/krpeacock/certified-cache/blob/c1f209d14f490f905b7de2a2bd3f917377310675/src/Http.mo#L28)
 - `type Request = Server.Request` - [./src/Server.mo](https://github.com/NatLabs/http-parser.mo/blob/27cba8ed0d39387e0fb660f65909ffe2a7d54413/src/Types.mo#L92)
-- `type Response = Server.Response` - 
+- `type Response = Server.Response` -
   ```
   {
     status_code : Nat16;
@@ -189,15 +227,21 @@ Below are all of the types and functions that are exported by this library, as w
 ```
 (
     [(HttpRequest, (HttpResponse, Nat))],
-    [(AssetTypes.Key, Assets.StableAsset)], 
+    [(AssetTypes.Key, Assets.StableAsset)],
     [Principal]
 )
 ```
 
 ### Classes
 
-- Server - the primary export of this library
-- ResponseClass - a class provided during `get`, `post`, `put`, and `delete`, with the following methods: 
+- **Server** - The primary export of this library.
+  - `get(path, handler)`
+  - `post(path, handler)`
+  - `put(path, handler)`
+  - `delete(path, handler)`
+  - `options(path, handler)`
+  - `enableCors(origin, methods, headers)`
+- **ResponseClass** - A class provided to handlers with the following methods:
     - `send (Response) : async ()`
     - `json (Response) : async ()`
 
