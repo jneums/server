@@ -12,7 +12,7 @@ shared ({ caller = creator }) actor class () {
   type HttpResponse = Server.HttpResponse;
   type ResponseClass = Server.ResponseClass;
 
-  stable var serializedEntries : Server.SerializedEntries = ([], [], [creator]);
+  var serializedEntries : Server.SerializedEntries = ([], [], [creator]);
 
   var server = Server.Server({ serializedEntries });
 
@@ -47,6 +47,19 @@ shared ({ caller = creator }) actor class () {
         status_code = 200;
         headers = [("Content-Type", "text/html")];
         body = Text.encodeUtf8("<html><body><h1>Foo</h1></body></html>");
+        streaming_strategy = null;
+        cache_strategy = #default;
+      });
+    },
+  );
+
+  server.get(
+    "/test",
+    func(req : Request, res : ResponseClass) : async Response {
+      res.send({
+        status_code = 200;
+        headers = [("Content-Type", "text/html")];
+        body = Text.encodeUtf8("<html><body><h1>Test</h1></body></html>");
         streaming_strategy = null;
         cache_strategy = #default;
       });

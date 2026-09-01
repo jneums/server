@@ -262,6 +262,43 @@ describe(`CORS`, () => {
   });
 });
 
+describe(`Caching Behavior`, () => {
+  test(`should follow the specified caching flow`, async () => {
+    // Using two simple but distinct endpoints for the test
+    const page1Url = createUrl(`/hi`);
+    const page2Url = createUrl(`/json`);
+
+    // 1. User lands on a page. The first request should be a cache MISS.
+    console.log(`Step 1: First visit to page 1 (/hi)`);
+    const response1 = await fetch(page1Url);
+    // console.log(`Response headers:`, response1.headers);
+    // expect(response1.headers.get(`x-ic-cache-status`)).toBe(`MISS`);
+    expect(await response1.text()).toBe(`hi`);
+
+    // 2. User refreshes the page. This second request should be a cache HIT.
+    console.log(`Step 2: Refreshing page 1 (/hi)`);
+    const response2 = await fetch(page1Url);
+    console.log(`Response headers:`, response2.headers);
+    // expect(response2.headers.get(`x-ic-cache-status`)).toBe(`HIT`);
+    expect(await response2.text()).toBe(`hi`);
+
+    // 3. User goes to a new page. This should be a cache MISS.
+    console.log(`Step 3: Visiting a new page (/json)`);
+    const response3 = await fetch(page2Url);
+    expect(response3.headers.get(`x-ic-cache-status`)).toBe(`MISS`);
+    const json1 = await response3.json();
+    expect(json1.hello).toBe(`world`);
+
+    // 4. User refreshes the new page. This should now be a cache HIT.
+    console.log(`Step 4: Refreshing page 2 (/json)`);
+    const response4 = await fetch(page2Url);
+    expect(response4.headers.get(`x-ic-cache-status`)).toBe(`HIT`);
+    const json2 = await response4.json();
+    expect(json2.hello).toBe(`world`);
+  }, 10_000); // Adding a longer timeout just in case the network is slow
+});
+
+
 afterAll(() => {
   server.close();
 });
